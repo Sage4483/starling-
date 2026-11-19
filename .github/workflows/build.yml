@@ -20,6 +20,10 @@ jobs:
           git apply --verbose /tmp/kit/汉化改动.patch || patch -p1 --forward < /tmp/kit/汉化改动.patch
           cp /tmp/kit/CJK-Regular.ttf /tmp/kit/CJK-Medium.ttf /tmp/kit/CJK-Bold.ttf crates/horizon-theme/fonts/
           sed -i 's/^codegen-units = 1$/codegen-units = 256/' Cargo.toml
+          echo "HORIZON_ANDROID_KEYSTORE=/tmp/kit/starling.keystore" >> $GITHUB_ENV
+          echo "HORIZON_ANDROID_KEY_ALIAS=starling" >> $GITHUB_ENV
+          echo "HORIZON_ANDROID_STORE_PASSWORD=starling123" >> $GITHUB_ENV
+          echo "HORIZON_ANDROID_KEY_PASSWORD=starling123" >> $GITHUB_ENV
           echo "中文词条数: $(grep -c 推荐 crates/horizon-client/src/android_control_ui.rs)"
       - uses: dtolnay/rust-toolchain@stable
         with:
