@@ -1,80 +1,44 @@
-name: 编译 Starling 汉化版
-
-on:
-  workflow_dispatch:
-
+name: build-zh
+on: [workflow_dispatch, push]
 jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 360
     steps:
-      - name: 拉取原版源码
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           repository: starling-client/starling
           path: starling
-
-      - name: 检查汉化包
+      - name: prep
         run: |
-          echo "工作区内容："
           ls -la
-          if [ -f kit.zip ]; then
-            echo "找到 kit.zip"
-            unzip -o kit.zip -d /tmp/kit
-            ls -la /tmp/kit
-          else
-            echo "!! 仓库里没有 kit.zip，请先上传汉化包"
-            exit 1
-          fi
-
-      - name: 打补丁并放入字体
-        run: |
+          test -f kit.zip || (echo "MISSING kit.zip in repo root"; exit 1)
+          unzip -o kit.zip -d /tmp/kit
           cd starling
           git apply --verbose /tmp/kit/汉化改动.patch
           cp /tmp/kit/CJK-Regular.ttf /tmp/kit/CJK-Medium.ttf /tmp/kit/CJK-Bold.ttf crates/horizon-theme/fonts/
-          # 这台机器内存富余，把 codegen-units 恢复成默认 256，编译并行度拉满
           sed -i 's/^codegen-units = 1$/codegen-units = 256/' Cargo.toml
-          echo "补丁与字体已就位"
-          git status --porcelain | head -10
-
-      - name: 安装 Rust
-uses: dtolnay/rust-toolchain@stable
-
-      - name: 缓存 Rust 编译产物
-        uses: Swatinem/rust-cache@v2
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
         with:
           workspaces: starling
-          cache-targets: true
-
-      - name: 安装 cargo-ndk
-        uses: taiki-e/install-action@cargo-ndk
-
-      - name: 安装 Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: 安装 NDK 与 build-tools
+      - uses: taiki-e/install-action@cargo-ndk
+      - uses: android-actions/setup-android@v3
+      - name: sdk
         run: |
           yes | sdkmanager "ndk;28.2.13676358" "build-tools;35.0.0" "platforms;android-36" > /dev/null
           echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/28.2.13676358" >> $GITHUB_ENV
-
-      - name: 编译
+      - name: compile
         working-directory: starling
-        run: |
-          cargo ndk -t arm64-v8a --platform 26 build --profile quick -p horizon-android
-
-      - name: 打包 APK
+        run: cargo ndk -t arm64-v8a --platform 26 build --profile quick -p horizon-android
+      - name: package
         working-directory: starling
         run: |
           python3 packaging/android/build_apk.py --no-build --profile quick
-          echo "=== 产物 ==="
           find . -name "*.apk" | head
-
-      - name: 上传产物
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
-          name: Starling-汉化版
-          path: |
-            starling/packaging/android/**/*.apk
-            starling/**/*.apk
+          name: apk
+          path: starling/**/*.apk
           if-no-files-found: warn
           retention-days: 30
