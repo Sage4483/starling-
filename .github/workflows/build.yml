@@ -22,8 +22,13 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: starling
-      - uses: taiki-e/install-action@cargo-ndk
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
       - uses: android-actions/setup-android@v3
+      - name: cargo-ndk
+        run: cargo install cargo-ndk --locked
       - name: sdk
         run: |
           yes | sdkmanager "ndk;28.2.13676358" "build-tools;35.0.0" "platforms;android-36" > /dev/null
