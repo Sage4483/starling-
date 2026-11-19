@@ -12,9 +12,9 @@ jobs:
           set -x
           test -f kit.zip || (echo "MISSING kit.zip in repo root"; exit 1)
           unzip -o kit.zip -d /tmp/kit
-          curl -L -o /tmp/src.tar.gz "https://github.com/starling-client/starling/archive/5432370d573642041585c69b40fb045b27133488.tar.gz"
+          curl -L -o /tmp/src.tar.gz "https://github.com/starling-client/starling/archive/ac874422ed8f892505ff73d67ae486ecfee7a516.tar.gz"
           tar xzf /tmp/src.tar.gz
-          mv starling-5432370d573642041585c69b40fb045b27133488 starling
+          mv starling-ac874422ed8f892505ff73d67ae486ecfee7a516 starling
           cd starling
           git init -q .
           git apply --verbose /tmp/kit/汉化改动.patch || patch -p1 --forward < /tmp/kit/汉化改动.patch
