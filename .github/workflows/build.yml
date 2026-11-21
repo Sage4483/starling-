@@ -11,65 +11,52 @@ jobs:
         run: |
           set -x
           test -f kit.zip || (echo "MISSING kit.zip in repo root"; exit 1)
+          rm -rf /tmp/kit && mkdir -p /tmp/kit
           unzip -o kit.zip -d /tmp/kit
-          curl -L -o /tmp/src.tar.gz "https://github.com/starling-client/starling/archive/ac874422ed8f892505ff73d67ae486ecfee7a516.tar.gz"
+          curl -L -o /tmp/src.tar.gz "https://codeload.github.com/starling-client/starling/tar.gz/refs/tags/v0.9.0"
           tar xzf /tmp/src.tar.gz
-          mv starling-ac874422ed8f892505ff73d67ae486ecfee7a516 starling
+          mv starling-0.9.0 starling
           cd starling
           git init -q .
           git apply --verbose /tmp/kit/汉化改动.patch || patch -p1 --forward < /tmp/kit/汉化改动.patch
           cp /tmp/kit/CJK-Regular.ttf /tmp/kit/CJK-Medium.ttf /tmp/kit/CJK-Bold.ttf crates/horizon-theme/fonts/
+          chmod +x tools/ci/rustup_install.sh
           sed -i 's/^codegen-units = 1$/codegen-units = 256/' Cargo.toml
           echo "HORIZON_ANDROID_KEYSTORE=/tmp/kit/starling.keystore" >> $GITHUB_ENV
           echo "HORIZON_ANDROID_KEY_ALIAS=starling" >> $GITHUB_ENV
           echo "HORIZON_ANDROID_STORE_PASSWORD=starling123" >> $GITHUB_ENV
           echo "HORIZON_ANDROID_KEY_PASSWORD=starling123" >> $GITHUB_ENV
-          echo "中文词条数: $(grep -c 推荐 crates/horizon-client/src/android_control_ui.rs)"
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: aarch64-linux-android
-      - name: target
-        run: rustup target add aarch64-linux-android
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: starling
+          echo "游戏内词条: $(python3 -c 'import json;print(len(json.load(open("crates/horizon-client/assets/horizon/lang/zh_cn.json"))))')"
+          echo "启动器词条: $(python3 -c 'import json;d=json.load(open("launcher/lang/zh.json"));print(len([1 for k,v in d.items() if k!=v]))')"
+          echo "界面汉化词条: $(python3 -c 'import json;print(len(json.load(open("crates/horizon-client/src/hanhua_zh.json"))))')"
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: 17
-      - name: cargo-ndk
-        run: cargo install cargo-ndk --locked
+          java-version: '25'
       - name: sdk
         run: |
           set -e
-          if [ -z "$ANDROID_HOME" ] || [ ! -d "$ANDROID_HOME/cmdline-tools/latest" ]; then
-            export ANDROID_HOME=$HOME/android-sdk
-            mkdir -p $ANDROID_HOME/cmdline-tools
-            curl -sSLo /tmp/cli.zip https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
-            unzip -q /tmp/cli.zip -d $ANDROID_HOME/cmdline-tools
-            mv $ANDROID_HOME/cmdline-tools/cmdline-tools $ANDROID_HOME/cmdline-tools/latest
-          fi
-          export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
-          export JAVA_HOME=${JAVA_HOME:-$(dirname $(dirname $(readlink -f $(which java))))}
-          yes | sdkmanager --licenses > /dev/null 2>&1 || true
-          sdkmanager "ndk;28.2.13676358" "build-tools;35.0.0" "platforms;android-36"
+          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --install "build-tools;35.0.0" "platforms;android-36" "ndk;28.2.13676358" > /dev/null
           echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
           echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/28.2.13676358" >> $GITHUB_ENV
-          echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> $GITHUB_PATH
-      - name: compile
+      - name: rust
+        working-directory: starling
+        run: |
+          bash tools/ci/rustup_install.sh --profile minimal --component rust-src --target aarch64-linux-android
+          cargo install cargo-ndk --version 3.5.4 --locked
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: starling
+      - name: build
         working-directory: starling
         run: |
           java -version
-          echo "NDK=$ANDROID_NDK_HOME"
-          cargo ndk -t arm64-v8a --platform 26 build --profile quick -p horizon-android
-      - name: package
-        working-directory: starling
-        run: |
-          python3 packaging/android/build_apk.py --no-build --profile quick
-          find . -name "*.apk" | head
+          rustc -V
+          python3 packaging/android/build_apk.py --abi arm64-v8a --profile quick
+          ls -l target/android/ | head
       - uses: actions/upload-artifact@v4
         with:
           name: apk
-          path: starling/**/*.apk
-          if-no-files-found: warn
+          path: starling/target/android/starling-*.apk
+          if-no-files-found: error
           retention-days: 30
