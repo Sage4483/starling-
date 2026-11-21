@@ -22,6 +22,9 @@ jobs:
           cp /tmp/kit/CJK-Regular.ttf /tmp/kit/CJK-Medium.ttf /tmp/kit/CJK-Bold.ttf crates/horizon-theme/fonts/
           chmod +x tools/ci/rustup_install.sh
           sed -i 's/^codegen-units = 1$/codegen-units = 256/' Cargo.toml
+          git add -A
+          git -c user.name=ci -c user.email=ci@local commit -qm "starling v0.9.0 zh patch"
+          echo "HORIZON_GAME_BUILD_ID=$(git rev-parse HEAD)" >> $GITHUB_ENV
           echo "HORIZON_ANDROID_KEYSTORE=/tmp/kit/starling.keystore" >> $GITHUB_ENV
           echo "HORIZON_ANDROID_KEY_ALIAS=starling" >> $GITHUB_ENV
           echo "HORIZON_ANDROID_STORE_PASSWORD=starling123" >> $GITHUB_ENV
