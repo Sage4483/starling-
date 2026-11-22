@@ -10,21 +10,41 @@ jobs:
     steps:
       - name: checkout-own
         uses: actions/checkout@v4
+      - name: swap
+        # The release build's 137 MB mod host needs the memory the official CI gives it.
+        run: |
+          set -e
+          where=/mnt
+          size=10G
+          avail=$(df --output=avail -BG "$where" 2>/dev/null | tail -1 | tr -dc 0-9)
+          if [ "${avail:-0}" -lt 30 ]; then where=$RUNNER_TEMP size=10G; fi
+          sudo fallocate -l "$size" "$where/release.swap"
+          sudo chmod 600 "$where/release.swap"
+          sudo mkswap "$where/release.swap" > /dev/null
+          sudo swapon "$where/release.swap"
+          free -h
+          echo "CARGO_BUILD_JOBS=3" >> "$GITHUB_ENV"
       - name: prep
         run: |
-          set -x
+          set -ex
           test -f kit.zip || (echo "MISSING kit.zip in repo root"; exit 1)
           rm -rf /tmp/kit && mkdir -p /tmp/kit
           unzip -o kit.zip -d /tmp/kit
+          ls -la /tmp/kit
           curl -L -o /tmp/src.tar.gz "https://codeload.github.com/starling-client/starling/tar.gz/refs/tags/v0.9.0"
           tar xzf /tmp/src.tar.gz
           mv starling-0.9.0 starling
           cd starling
           git init -q .
-          git apply --verbose /tmp/kit/汉化改动.patch || patch -p1 --forward < /tmp/kit/汉化改动.patch
+          git apply --verbose /tmp/kit/汉化改动.patch
           cp /tmp/kit/CJK-Regular.ttf /tmp/kit/CJK-Medium.ttf /tmp/kit/CJK-Bold.ttf crates/horizon-theme/fonts/
-          chmod +x tools/ci/rustup_install.sh
           sed -i 's/^codegen-units = 1$/codegen-units = 256/' Cargo.toml
+          # Loud checks: the translation must be in, and nothing else must have been dropped.
+          test -f crates/horizon-client/src/hanhua_zh.json
+          test -f launcher/lang/zh.json
+          test -f crates/horizon-theme/fonts/CJK-Regular.ttf
+          test -f packaging/android/native_build.sh
+          test -f tools/android_native_sdk.py
           git add -A
           git -c user.name=ci -c user.email=ci@local commit -qm "starling v0.9.0 zh patch"
           echo "HORIZON_GAME_BUILD_ID=$(git rev-parse HEAD)" >> $GITHUB_ENV
@@ -53,16 +73,40 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: starling
+      - name: prepare the mod API as dylibs
+        # The official arm64 release: the game's crates (mod host and the mod API among them) are
+        # libraries of their own, so the phone can compile native mods. Skipping this is what made
+        # the earlier translations lose that feature.
+        working-directory: starling
+        run: python3 tools/android_native_sdk.py prepare
       - name: build
         working-directory: starling
+        env:
+          RUSTFLAGS: -C prefer-dynamic
         run: |
+          set -e
           java -version
           rustc -V
-          python3 packaging/android/build_apk.py --abi arm64-v8a --profile quick
-          ls -l target/android/ | head
+          python3 packaging/android/build_apk.py --abi arm64-v8a --profile fast
+          ls -l target/android/*.apk
+          python3 - <<'PY'
+          import zipfile, glob, json
+          apk = sorted(glob.glob('target/android/starling-*.apk'))[-1]
+          names = [n for n in zipfile.ZipFile(apk).namelist() if n.startswith('lib/arm64-v8a/')]
+          print(apk, len(names), 'libraries')
+          for n in sorted(names):
+              print('  ', n)
+          # The official arm64 release ships the mod API's libraries; a static single-library build
+          # has none of them, and that is exactly the feature this must not lose.
+          want = ['libhorizon_mod_host.so', 'libmod_vocab.so', 'libmod_points.so',
+                  'libhorizon_engine_slots.so', 'libmod_api.so', 'libhorizon_core.so']
+          missing = [w for w in want if f'lib/arm64-v8a/{w}' not in names]
+          if missing:
+              raise SystemExit(f'build_apk: the APK is missing the official libraries: {missing}')
+          PY
       - uses: actions/upload-artifact@v4
         with:
-          name: apk
+          name: apk-zh
           path: starling/target/android/starling-*.apk
           if-no-files-found: error
-          retention-days: 30
+          retention-days: 90
