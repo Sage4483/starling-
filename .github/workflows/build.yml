@@ -37,14 +37,21 @@ jobs:
           cd starling
           git init -q .
           git apply --verbose /tmp/kit/汉化改动.patch
+          # Microsoft sign-in over the legacy MSA device-code flow (oauth20_connect.srf / oauth20_token.srf,
+          # the code page www.microsoft.com/link?otc=…&client_id=…).
+          test -f /tmp/kit/登录修复.patch
+          git apply --verbose /tmp/kit/登录修复.patch
           cp /tmp/kit/CJK-Regular.ttf /tmp/kit/CJK-Medium.ttf /tmp/kit/CJK-Bold.ttf crates/horizon-theme/fonts/
           sed -i 's/^codegen-units = 1$/codegen-units = 256/' Cargo.toml
-          # Loud checks: the translation must be in, and nothing else must have been dropped.
+          # Loud checks: the translation and the sign-in fix must be in, and nothing else dropped.
           test -f crates/horizon-client/src/hanhua_zh.json
           test -f launcher/lang/zh.json
           test -f crates/horizon-theme/fonts/CJK-Regular.ttf
           test -f packaging/android/native_build.sh
           test -f tools/android_native_sdk.py
+          grep -q 'oauth20_connect.srf' crates/starling-account/src/lib.rs
+          grep -q 'otc=' crates/starling-account/src/lib.rs
+          grep -q 'oauth20_token.srf' crates/starling-account/src/lib.rs
           git add -A
           git -c user.name=ci -c user.email=ci@local commit -qm "starling v0.9.0 zh patch"
           echo "HORIZON_GAME_BUILD_ID=$(git rev-parse HEAD)" >> $GITHUB_ENV
