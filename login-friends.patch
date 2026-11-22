@@ -1,0 +1,43 @@
+--- a/crates/starling-account/src/lib.rs
++++ b/crates/starling-account/src/lib.rs
+@@ -32,7 +32,7 @@
+ }
+ 
+ /// Starling's Azure app (a public client: its ID is no secret).
+-pub const CLIENT_ID: &str = "f2719b6f-5617-4631-b2d7-a21defa191fc";
++pub const CLIENT_ID: &str = "00000000441cc96b";
+ /// The only scopes the app was approved for.
+ const SCOPE: &str = "XboxLive.signin offline_access";
+ const SIGN_IN_AGAIN: &str = "Your Microsoft sign-in expired. Sign in again.";
+--- a/crates/horizon-client/Cargo.toml
++++ b/crates/horizon-client/Cargo.toml
+@@ -53,7 +53,7 @@
+ # Horizon's own shader packs: the format, the stages and the check (docs/shaders.md).
+ horizon-shader-api = { path = "../horizon-shader-api" }
+ # Play with Friends: invite codes and their tunnel; the `friends` feature.
+-horizon-friends = { path = "../horizon-friends", optional = true }
++horizon-friends = { path = "../horizon-friends", optional = true, features = ["game"] }
+ # The narrator (GameNarrator): text-to-speech of chat, system messages and screens.
+ horizon-narrator = { path = "../horizon-narrator" }
+ # Horizon mods: sandboxed WebAssembly components, off unless installed and turned on (docs/modding/src/how-to/content-mods.md).
+@@ -161,7 +161,7 @@
+ horizon-extras = ["horizon-client-render/horizon-extras", "friends"]
+ # Play with Friends: sharing a world behind an invite code (game/friends.rs). Joining one is
+ # horizon-friends' `game` side, which horizon-official registers (`horizon_hooks::tunnel`).
+-friends = ["dep:horizon-friends"]
++friends = ["dep:horizon-friends", "horizon-friends/game"]
+ # Records the call sites of mob random draws (`mob_ai_probe` traces).
+ rng-trace = ["horizon-core/rng-trace", "horizon-client-lib/rng-trace"]
+ # Rust's allocations go to the system heap instead of mimalloc, where heap profilers that replace
+--- a/crates/horizon-client/src/entry.rs
++++ b/crates/horizon-client/src/entry.rs
+@@ -139,6 +139,9 @@
+     crash::on_report(horizon_client::telemetry::keep_crash);
+     // Crates above the engine registered their hooks before this (horizon-official's `main`),
+     // then the Horizon parts still in this crate; none registers after this point.
++    // Play with Friends' joining side (`friend:CODE`): horizon-official registers it, this
++    // executable (horizon-android) has no official main, so it is registered here instead.
++    let _ = horizon_hooks::register(&horizon_friends::game::HOOKS);
+     game::player_hooks::register();
+     horizon_hooks::engine::seal();
+     // The text crates ship (`horizon_hooks::lang`), loaded with the game's own languages.
