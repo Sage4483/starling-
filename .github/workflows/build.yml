@@ -41,6 +41,10 @@ jobs:
           # the code page www.microsoft.com/link?otc=…&client_id=…).
           test -f /tmp/kit/登录修复.patch
           git apply --verbose /tmp/kit/登录修复.patch
+          # 商店只认官方 Nightly 的 build；自己编的提交对不上，别卡在「没有这个 build 的库」上，
+          # 直接退回整包编译。
+          test -f "$GITHUB_WORKSPACE/store-fallback.patch"
+          git apply --verbose "$GITHUB_WORKSPACE/store-fallback.patch"
           cp /tmp/kit/CJK-Regular.ttf /tmp/kit/CJK-Medium.ttf /tmp/kit/CJK-Bold.ttf crates/horizon-theme/fonts/
           sed -i 's/^codegen-units = 1$/codegen-units = 256/' Cargo.toml
           # Loud checks: the translation and the sign-in fix must be in, and nothing else dropped.
@@ -54,6 +58,7 @@ jobs:
           grep -q 'login.live.com' crates/starling-account/src/lib.rs
           grep -q '"otc"' crates/horizon-client/src/ha_launcher/login.rs
           grep -q '"client_id"' crates/horizon-client/src/ha_launcher/login.rs
+          grep -q 'FromStore::Unbuilt' crates/horizon-client/src/game/starling/native_builds.rs
           git add -A
           git -c user.name=ci -c user.email=ci@local commit -qm "starling v0.9.0 zh patch"
           echo "HORIZON_GAME_BUILD_ID=$(git rev-parse HEAD)" >> $GITHUB_ENV
