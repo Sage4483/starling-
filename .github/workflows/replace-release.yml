@@ -1,0 +1,38 @@
+name: replace-release-asset
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  swap:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+      TAG: v0.9.0-zh-r36
+      ARTIFACT_ID: "15185970241"
+      ASSET_NAME: Starling-0.9.0-arm64-full-zh-r36-login.apk
+    steps:
+      - name: Download build artifact
+        run: |
+          set -euo pipefail
+          curl -sSL -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/$REPO/actions/artifacts/$ARTIFACT_ID/zip" -o art.zip
+          ls -l art.zip
+          unzip -o art.zip -d art
+          ls -lR art | head -20
+          APK=$(find art -name '*.apk' | head -1)
+          echo "apk=$APK"
+          sha256sum "$APK"
+          cp "$APK" "$ASSET_NAME"
+          ls -l "$ASSET_NAME"
+      - name: Upload asset (clobber)
+        run: |
+          set -euo pipefail
+          gh release upload "$TAG" "$ASSET_NAME" --clobber --repo "$REPO"
+          gh release view "$TAG" --repo "$REPO" --json assets -q '.assets[] | "\(.name) \(.size)"'
