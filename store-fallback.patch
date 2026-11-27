@@ -1,5 +1,5 @@
 diff --git a/crates/horizon-client/src/game/starling/native_builds.rs b/crates/horizon-client/src/game/starling/native_builds.rs
-index ef31872..64f31e1 100644
+index ef31872..a99baf6 100644
 --- a/crates/horizon-client/src/game/starling/native_builds.rs
 +++ b/crates/horizon-client/src/game/starling/native_builds.rs
 @@ -727,6 +727,9 @@ enum FromStore {
@@ -43,13 +43,33 @@ index ef31872..64f31e1 100644
          }
      };
      let cache = dir().join(STORE_LIBS);
-@@ -1388,6 +1392,9 @@ fn compile(version: &str, github: bool, shared: &Mutex<Shared>) -> Result<String
+@@ -1386,12 +1390,23 @@ fn compile(version: &str, github: bool, shared: &Mutex<Shared>) -> Result<String
+     // Compile v2: a library per mod from the store, when this APK plays one; else (or when the
+     // store can't play these mods) the whole game with them, as before.
      if own_service && loads_store_builds() {
-         match compile_from_store(&server, &agent, shared, &mut asked)? {
-             FromStore::Built => return Ok(NATIVE_LIBS.to_owned()),
-+            FromStore::Unbuilt => {
+-        match compile_from_store(&server, &agent, shared, &mut asked)? {
+-            FromStore::Built => return Ok(NATIVE_LIBS.to_owned()),
+-            // The whole-game Compile builds no game made of libraries: sent there, one mod the
+-            // store can't play failed every mod with "That is not a version of the game"
+-            // (2026-11-20). The player turns that one off instead.
+-            FromStore::NotHere(why) => return Err(why),
++        match compile_from_store(&server, &agent, shared, &mut asked) {
++            Ok(FromStore::Built) => return Ok(NATIVE_LIBS.to_owned()),
++            Ok(FromStore::Unbuilt) => {
 +                log::warn!("Horizon: this Starling's own build is not in the store; whole-game Compile");
 +            }
-             // The whole-game Compile builds no game made of libraries: sent there, one mod the
-             // store can't play failed every mod with "That is not a version of the game"
-             // (2026-11-20). The player turns that one off instead.
++            // 只有「旧格式的包」是真没救，得让人自己处理；其余（商店还没这个 build 的库、
++            // 服务说等等再来）一律往整包编译上落，别拿一句「Try again in a while」把人挡死。
++            Ok(FromStore::NotHere(why)) => {
++                if why.contains("old native mod format") {
++                    return Err(why);
++                }
++                log::warn!("Horizon: store can't play these mods ({why}); whole-game Compile");
++            }
++            // 商店这条路自己出错（拉不到 builds.json、解析不出来、服务回了别的），也照样整包编译。
++            Err(e) => {
++                log::warn!("Horizon: the store path failed ({e}); whole-game Compile");
++            }
+         }
+     }
+     // The machine that builds sleeps until it is asked: the gateway says so while it wakes.
