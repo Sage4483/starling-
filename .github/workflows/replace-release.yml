@@ -20,6 +20,9 @@ jobs:
       - name: Download build artifact
         run: |
           set -euo pipefail
+          ARTIFACT_ID=$(gh api "repos/$REPO/actions/artifacts?per_page=30" \
+            -q '[.artifacts[] | select(.name=="apk-zh" and .expired==false)][0].id')
+          echo "artifact=$ARTIFACT_ID"
           curl -sSL -H "Authorization: Bearer $GH_TOKEN" \
             -H "Accept: application/vnd.github+json" \
             "https://api.github.com/repos/$REPO/actions/artifacts/$ARTIFACT_ID/zip" -o art.zip
