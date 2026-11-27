@@ -1,0 +1,55 @@
+diff --git a/crates/horizon-client/src/game/starling/native_builds.rs b/crates/horizon-client/src/game/starling/native_builds.rs
+index ef31872..64f31e1 100644
+--- a/crates/horizon-client/src/game/starling/native_builds.rs
++++ b/crates/horizon-client/src/game/starling/native_builds.rs
+@@ -727,6 +727,9 @@ enum FromStore {
+     /// The store can't play them: why, said to the player. A game made of libraries has no
+     /// whole-game Compile to send them to (`compile`).
+     NotHere(String),
++    /// 这个 Starling 的 build 商店里根本没有（自己编的 APK，提交商店从没见过）：
++    /// 退回旧的整包编译，别在这儿报错卡死。
++    Unbuilt,
+ }
+ 
+ /// Compile v2: the mods on, as libraries of this game's own build from the store, the ones it
+@@ -778,9 +781,8 @@ fn compile_from_store(
+         &store::download(repo, store::STORE_TAG, store::BUILDS),
+     )?
+     else {
+-        return Ok(FromStore::NotHere(
+-            "The mod store has no builds yet. Try again later.".into(),
+-        ));
++        log::warn!("Horizon: the store lists no builds, compiling the whole game");
++        return Ok(FromStore::Unbuilt);
+     };
+     // Only this game's build: a library of another one doesn't load here.
+     let builds: Vec<store::Build> = store::builds(&text)?
+@@ -819,12 +821,14 @@ fn compile_from_store(
+             )));
+         }
+         store::Plan::Fails { id, error } => return Err(format!("{id}: {error}")),
++        // 商店只认它自己编的那些 build（官方 Nightly 的提交）。自己编的 APK 提交对不上，
++        // 永远等不到库：退回整包编译。
+         store::Plan::NoBuild => {
+-            return Ok(FromStore::NotHere(format!(
+-                "The mod store has no libraries for this Starling ({}, {abi}) yet. Try again in \
+-                 a while.",
++            log::warn!(
++                "Horizon: the store has no libraries for this Starling ({}), compiling the whole game",
+                 &own[..own.len().min(10)]
+-            )));
++            );
++            return Ok(FromStore::Unbuilt);
+         }
+     };
+     let cache = dir().join(STORE_LIBS);
+@@ -1388,6 +1392,9 @@ fn compile(version: &str, github: bool, shared: &Mutex<Shared>) -> Result<String
+     if own_service && loads_store_builds() {
+         match compile_from_store(&server, &agent, shared, &mut asked)? {
+             FromStore::Built => return Ok(NATIVE_LIBS.to_owned()),
++            FromStore::Unbuilt => {
++                log::warn!("Horizon: this Starling's own build is not in the store; whole-game Compile");
++            }
+             // The whole-game Compile builds no game made of libraries: sent there, one mod the
+             // store can't play failed every mod with "That is not a version of the game"
+             // (2026-11-20). The player turns that one off instead.
